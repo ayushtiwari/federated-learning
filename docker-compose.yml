@@ -1,0 +1,11 @@
+version: "3"
+services:
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - SERVER_IP=host.docker.internal
+      - TF_CPP_MIN_LOG_LEVEL=3
+    tty: true
+    command: ["python", "client.py"]
