@@ -4,6 +4,7 @@ import zmq
 import tensorflow as tf
 from tensorflow import keras
 import numpy as np
+import random
 
 context = zmq.Context()
 
@@ -11,7 +12,7 @@ context = zmq.Context()
 registrar = context.socket(zmq.REP)
 registrar.bind("tcp://*:5555")
 
-# Model Serving Socket
+# Selector Socket
 selector = context.socket(zmq.REP)
 selector.bind("tcp://*:5556")
 
@@ -20,7 +21,12 @@ aggregator = context.socket(zmq.SUB)
 aggregator.bind("tcp://*:5557")
 aggregator.setsockopt_string(zmq.SUBSCRIBE, "")
 
+# Model Serving Socket
+responder = context.socket(zmq.REP)
+responder.bind("tcp://*:5558")
+
 clients = {}
+selected_clients = []
 model = keras.Sequential([
     keras.layers.Flatten(input_shape=(28, 28)),
     keras.layers.Dense(128, activation='relu'),
@@ -31,12 +37,20 @@ model.compile(optimizer='adam',
               metrics=['accuracy'])
 version = 0
 
-NUM_CLIENTS = 2
+fashion_mnist = tf.keras.datasets.fashion_mnist
+(_, _), (x_test, y_test) = fashion_mnist.load_data()
+x_test = x_test[0:1000]
+y_test = y_test[0:1000]
+x_test = x_test / 255.0
+
+NUM_CLIENTS = 5
 NUM_ROUNDS = 10
+
+SELECTOR_CONSTANT = 2
 
 
 def register():
-    print("Regitering clients...")
+    print("Waiting for registrations...")
     for i in range(NUM_CLIENTS):
         reg_req = registrar.recv_pyobj()
         client_ip = reg_req["ip_addr"]
@@ -48,6 +62,29 @@ def register():
 
 def select():
     print("Selecting clients...")
+
+    global selected_clients
+    selected_clients = []
+    ready_clients = []
+    while True:
+
+        if selector.poll(10000):
+            request = selector.recv_pyobj(zmq.DONTWAIT)
+            client_id = request["client_id"]
+            print("Received request from %s" % client_id)
+            ready_clients.append(client_id)
+            selector.send_pyobj("")
+        else:
+            break
+
+    if len(ready_clients) >= SELECTOR_CONSTANT:
+        selected_clients = random.sample(ready_clients, SELECTOR_CONSTANT)
+
+    print("Selected clients: %s" % selected_clients)
+    return len(selected_clients)
+
+
+def respond():
     train_request = dict({
         "selected": True,
         "model": dict({
@@ -64,19 +101,36 @@ def select():
         })
     })
 
-    for _ in range(NUM_CLIENTS):
-        request = selector.recv_pyobj()
-        print("Sending model to %s" % request["client_id"])
-        selector.send_pyobj(train_request)
+    reject_message = dict({
+        "selected": False
+    })
+
+    selected_clients_copy = selected_clients.copy()
+    while len(selected_clients_copy) > 0:
+        request = responder.recv_pyobj()
+        client_id = request["client_id"]
+
+        if client_id in selected_clients_copy:
+            responder.send_pyobj(train_request)
+            selected_clients_copy.remove(client_id)
+        else:
+            responder.send_pyobj(reject_message)
 
 
 def aggregate():
     print("Waiting for updates...")
     updates = []
-    for i in range(NUM_CLIENTS):
+
+    selected_clients_copy = selected_clients.copy()
+    while len(selected_clients_copy) > 0:
         update = aggregator.recv_pyobj()
-        print("Received update on version %s from client %s" % (update["version"], update["client_id"]))
-        updates.append(update)
+        client_id = update["client_id"]
+
+        if client_id in selected_clients_copy:
+            model_version = update["version"]
+            print("Received update on version %s from client %s" % (model_version, client_id))
+            updates.append(update)
+            selected_clients_copy.remove(client_id)
 
     total_points = 0
     for update in updates:
@@ -89,7 +143,7 @@ def aggregate():
     for update in updates:
         points = update["points"]
         weights = update["weights"]
-        weighted_avg += (points/total_points) * np.array(weights)
+        weighted_avg += (points / total_points) * np.array(weights)
 
     model.set_weights(weighted_avg.tolist())
 
@@ -102,14 +156,10 @@ def aggregate():
 
 print("Server started")
 
-fashion_mnist = tf.keras.datasets.fashion_mnist
-(_, _), (x_test, y_test) = fashion_mnist.load_data()
-x_test = x_test[0:1000]
-y_test = y_test[0:1000]
-x_test = x_test/255.0
-
 register()
 
-for _ in range(NUM_ROUNDS):
+while True:
     select()
-    aggregate()
+    if len(selected_clients) > 0:
+        respond()
+        aggregate()

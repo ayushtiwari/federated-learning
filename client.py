@@ -1,4 +1,5 @@
 import os
+import time
 
 import zmq
 import socket as sock
@@ -20,6 +21,10 @@ selector.connect("tcp://%s:5556" % (os.environ.get("SERVER_IP")))
 aggregator = context.socket(zmq.PUB)
 aggregator.connect("tcp://%s:5557" % (os.environ.get("SERVER_IP")))
 
+# Responder socket
+responder = context.socket(zmq.REQ)
+responder.connect("tcp://%s:5558" % (os.environ.get("SERVER_IP")))
+
 ip_addr = sock.gethostbyname(sock.gethostname())
 
 NUM_POINTS = 1000
@@ -32,12 +37,19 @@ def register():
     return reply["client_id"]
 
 
+def notify():
+    print("Notifying selector...")
+    selector.send_pyobj({"client_id": my_id})
+    selector.recv_pyobj()
+
+
 def request():
     print("Looking for requests...")
-    selector.send_pyobj({"client_id": my_id})
-    reply = selector.recv_pyobj()
+    responder.send_pyobj({"client_id": my_id})
+    reply = responder.recv_pyobj()
 
     if reply["selected"]:
+        print("Received request")
         model_dict = reply["model"]
         _model = tf.keras.models.model_from_json(model_dict["arch"])
         _model.set_weights(model_dict["weights"])
@@ -46,10 +58,10 @@ def request():
                        metrics=model_dict["metrics_names"])
         _hparam = reply["hparam"]
         _version = reply["version"]
-        print(model_dict["loss"])
         return _model, _version, _hparam
     else:
-        return None, None
+        print("No request received")
+        return None, None, None
 
 
 def update():
@@ -73,6 +85,12 @@ y_train = y_train[my_id * NUM_POINTS:(my_id + 1) * NUM_POINTS]
 x_train = x_train / 255.0
 
 while True:
+    notify()
     model, version, hparam = request()
+    if model is None:
+        print("Going to sleep for 2s...")
+        time.sleep(2)
+        continue
+
     model.fit(x_train, y_train, epochs=hparam["epochs"], batch_size=hparam["batch_size"], validation_split=0.3)
     update()
