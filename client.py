@@ -73,20 +73,14 @@ def request():
 
 def update():
     print("Computing update on version... %d" % version)
-    history = model.fit(x_train, y_train,
+    history = model.fit(datagen.flow(x_train, y_train, batch_size=hparam["batch_size"]),
                         epochs=hparam["epochs"],
-                        batch_size=hparam["batch_size"],
-                        validation_split=0.3,
-                        shuffle=True)
+                        workers=4)
 
     metrics = {
         "training": {
             "loss": history.history['loss'][-1],
             "accuracy": history.history['accuracy'][-1],
-        },
-        "validation": {
-            "loss": history.history['val_loss'][-1],
-            "accuracy": history.history['val_accuracy'][-1]
         }
     }
 
@@ -120,6 +114,8 @@ train_data = dataset.train_data(os.environ["TRAIN_DATA_PATH"], my_id)
 
 x_train = train_data["x_train"]
 y_train = train_data["y_train"]
+datagen = dataset.image_data_generator_cifar10()
+datagen.fit(x_train)
 
 print('x_train shape:', x_train.shape)
 print(x_train.shape[0], 'train samples')
@@ -130,8 +126,8 @@ while True:
     notify()
     model, version, hparam = request()
     if model is None:
-        time.sleep(random.randint(10, 15))
+        time.sleep(random.randint(10, 20))
         continue
 
     update()
-    time.sleep(random.randint(5, 10))
+    time.sleep(random.randint(10, 30))

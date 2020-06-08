@@ -145,6 +145,9 @@ def aggregate():
     selected_clients_copy = selected_clients.copy()
     while len(selected_clients_copy) > 0:
         update = aggregator.recv_pyobj()
+
+        print("Recieved update %d/%d" % (len(selected_clients_copy), len(selected_clients)))
+
         client_id = update["client_id"]
         model_version = update["version"]
         client_metrics = update["metrics"]
