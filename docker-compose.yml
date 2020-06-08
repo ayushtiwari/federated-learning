@@ -5,8 +5,13 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      - SERVER_IP=host.docker.internal
+#      - SERVER_IP=host.docker.internal
+      - SERVER_IP=10.42.67.152
       - TF_CPP_MIN_LOG_LEVEL=3
-      - TRAIN_DATA_PATH=/app/data/fashion_mnist/train
+      - TRAIN_DATA_PATH=/app/data/cifar10/train
+      - LOG_PATH=/app/logs/clients
+    volumes:
+      - /root/mount/ayush/data:/app/data
+      - /root/zmq/logs:/app/logs
     tty: true
     command: ["python", "client.py"]

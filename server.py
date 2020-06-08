@@ -7,6 +7,9 @@ from tensorflow import keras
 
 import numpy as np
 import random
+import dataset
+import loader
+import json
 
 context = zmq.Context()
 
@@ -32,20 +35,13 @@ selected_clients = []
 ready_clients = []
 
 print("Loading model...")
-model = keras.Sequential([
-    keras.layers.Flatten(input_shape=(28, 28)),
-    keras.layers.Dense(128, activation='relu'),
-    keras.layers.Dense(10)
-])
-model.compile(optimizer='adam',
-              loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-              metrics=['accuracy'])
+model = loader.cifar10()
 
-TEST_DATA_PATH='/Users/ayushtiwari/Desktop/zmq/data/fashion_mnist/test'
+# TEST_DATA_PATH='/root/mount/ayush/data/fashion_mnist/test'
+TEST_DATA_PATH = '/root/mount/ayush/data/cifar10/test'
 
 print("Loading test data...")
-with open('%s/server.pickle' % TEST_DATA_PATH, 'rb') as file:
-    test_data = pickle.load(file)
+test_data = dataset.test_data(TEST_DATA_PATH)
 
 x_test = test_data["x_test"]
 y_test = test_data["y_test"]
@@ -55,10 +51,10 @@ print(x_test.shape[0], 'test samples')
 
 version = 0
 
-NUM_CLIENTS = 1
+NUM_CLIENTS = 20
 NUM_ROUNDS = 10
 
-SELECTOR_CONSTANT = 1
+SELECTOR_CONSTANT = 10
 
 
 def register():
@@ -70,6 +66,7 @@ def register():
 
         print("Registering %s" % reg_req["ip_addr"])
         registrar.send_pyobj({"client_id": i})
+        print("Registered %d/%d" % (i, NUM_CLIENTS))
 
 
 def select():
@@ -115,7 +112,7 @@ def respond():
         }),
         "version": version,
         "hparam": dict({
-            "epochs": 2,
+            "epochs": 1,
             "batch_size": 32
         })
     })
@@ -138,19 +135,23 @@ def respond():
 
 def aggregate():
     if len(selected_clients) <= 0:
-        return
+        return {"success": False}
 
     print("Waiting for updates...")
     updates = []
+
+    global version
 
     selected_clients_copy = selected_clients.copy()
     while len(selected_clients_copy) > 0:
         update = aggregator.recv_pyobj()
         client_id = update["client_id"]
+        model_version = update["version"]
+        client_metrics = update["metrics"]
 
-        if client_id in selected_clients_copy:
-            model_version = update["version"]
+        if client_id in selected_clients_copy and model_version == version:
             print("Received update on version %s from client %s" % (model_version, client_id))
+            print("Metrics: %s" % json.dumps(client_metrics, indent=4, sort_keys=True))
             updates.append(update)
             selected_clients_copy.remove(client_id)
 
@@ -169,18 +170,31 @@ def aggregate():
 
     model.set_weights(weighted_avg.tolist())
 
-    global version
     version += 1
     print("Current version: %s" % version)
     print("Evaluating...")
-    model.evaluate(x=x_test, y=y_test, batch_size=32)
+    history = model.evaluate(x=x_test, y=y_test, batch_size=32)
+    return {"success": True, "loss": history[0], "accuracy": history[1]}
 
 
 print("Server started")
+print("NUM_CLIENTS = %d" % NUM_CLIENTS)
 
 register()
+
+training_round = 0
+
+log = []
 
 while True:
     select()
     respond()
-    aggregate()
+    server_metrics = aggregate()
+    log.append({
+        training_round: server_metrics
+    })
+
+    with open("logs/server/accuracy.json", 'w+') as file:
+        json.dump(log, file, sort_keys=True, indent=4)
+
+    training_round += 1

@@ -1,6 +1,7 @@
 import os
 import time
 import pickle
+import random
 
 import zmq
 import socket as sock
@@ -9,12 +10,17 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.datasets import cifar10
 import numpy as np
+import glob
+import dataset
+import json
 
 context = zmq.Context()
 
 # Registration Socket
 registrar = context.socket(zmq.REQ)
 registrar.connect("tcp://%s:5555" % (os.environ.get("SERVER_IP")))
+
+print("tcp://%s:5555" % (os.environ.get("SERVER_IP")))
 
 # Selection Socket
 selector = context.socket(zmq.REQ)
@@ -29,8 +35,6 @@ responder = context.socket(zmq.REQ)
 responder.connect("tcp://%s:5558" % (os.environ.get("SERVER_IP")))
 
 ip_addr = sock.gethostbyname(sock.gethostname())
-
-NUM_POINTS = 1000
 
 
 def register():
@@ -68,13 +72,43 @@ def request():
 
 
 def update():
-    print("Sending update on version %s..." % version)
-    aggregator.send_pyobj(dict({
+    print("Computing update on version... %d" % version)
+    history = model.fit(x_train, y_train,
+                        epochs=hparam["epochs"],
+                        batch_size=hparam["batch_size"],
+                        validation_split=0.3,
+                        shuffle=True)
+
+    metrics = {
+        "training": {
+            "loss": history.history['loss'][-1],
+            "accuracy": history.history['accuracy'][-1],
+        },
+        "validation": {
+            "loss": history.history['val_loss'][-1],
+            "accuracy": history.history['val_accuracy'][-1]
+        }
+    }
+
+    logs.append({
+        "version": version,
+        "metrics": metrics
+    })
+
+    print("Saving metrics...")
+    with open('%s/client_%s.json' % (os.environ.get("LOG_PATH"), my_id), 'w+') as file:
+        json.dump(logs, file, indent=4, sort_keys=True)
+
+    _update = dict({
         "client_id": my_id,
         "weights": model.get_weights(),
         "version": version,
-        "points": NUM_POINTS
-    }))
+        "points": x_train.shape[0],
+        "metrics": metrics
+    })
+
+    print("Sending update...")
+    aggregator.send_pyobj(_update)
 
 
 print("[{}] Started".format(ip_addr))
@@ -82,8 +116,7 @@ my_id = register()
 print("my_id: %s" % my_id)
 
 print("Loading train data...")
-with open('%s/client_%s.pickle' % (os.environ["TRAIN_DATA_PATH"], my_id), 'rb') as file:
-    train_data = pickle.load(file)
+train_data = dataset.train_data(os.environ["TRAIN_DATA_PATH"], my_id)
 
 x_train = train_data["x_train"]
 y_train = train_data["y_train"]
@@ -91,13 +124,14 @@ y_train = train_data["y_train"]
 print('x_train shape:', x_train.shape)
 print(x_train.shape[0], 'train samples')
 
+logs = []
+
 while True:
     notify()
     model, version, hparam = request()
     if model is None:
-        print("Going to sleep for 2s...")
-        time.sleep(2)
+        time.sleep(random.randint(10, 15))
         continue
 
-    model.fit(x_train, y_train, epochs=hparam["epochs"], batch_size=hparam["batch_size"], validation_split=0.3)
     update()
+    time.sleep(random.randint(5, 10))
