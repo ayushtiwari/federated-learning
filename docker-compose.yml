@@ -7,5 +7,6 @@ services:
     environment:
       - SERVER_IP=host.docker.internal
       - TF_CPP_MIN_LOG_LEVEL=3
+      - TRAIN_DATA_PATH=/app/data/fashion_mnist/train
     tty: true
     command: ["python", "client.py"]

@@ -1,11 +1,14 @@
 import os
 import time
+import pickle
 
 import zmq
 import socket as sock
 
 import tensorflow as tf
 from tensorflow import keras
+from tensorflow.keras.datasets import cifar10
+import numpy as np
 
 context = zmq.Context()
 
@@ -78,11 +81,15 @@ print("[{}] Started".format(ip_addr))
 my_id = register()
 print("my_id: %s" % my_id)
 
-fashion_mnist = tf.keras.datasets.fashion_mnist
-(x_train, y_train), (_, _) = fashion_mnist.load_data()
-x_train = x_train[my_id * NUM_POINTS:(my_id + 1) * NUM_POINTS]
-y_train = y_train[my_id * NUM_POINTS:(my_id + 1) * NUM_POINTS]
-x_train = x_train / 255.0
+print("Loading train data...")
+with open('%s/client_%s.pickle' % (os.environ["TRAIN_DATA_PATH"], my_id), 'rb') as file:
+    train_data = pickle.load(file)
+
+x_train = train_data["x_train"]
+y_train = train_data["y_train"]
+
+print('x_train shape:', x_train.shape)
+print(x_train.shape[0], 'train samples')
 
 while True:
     notify()

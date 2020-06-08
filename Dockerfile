@@ -5,6 +5,6 @@ RUN apt-get update && \
   gcc
 
 WORKDIR /app
-RUN pip install pyzmq msgpack tensorflow
+RUN pip install pyzmq msgpack tf-nightly
 
 ADD . /app

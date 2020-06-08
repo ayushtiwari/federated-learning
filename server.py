@@ -1,8 +1,10 @@
 import os
+import pickle
 
 import zmq
 import tensorflow as tf
 from tensorflow import keras
+
 import numpy as np
 import random
 
@@ -27,6 +29,9 @@ responder.bind("tcp://*:5558")
 
 clients = {}
 selected_clients = []
+ready_clients = []
+
+print("Loading model...")
 model = keras.Sequential([
     keras.layers.Flatten(input_shape=(28, 28)),
     keras.layers.Dense(128, activation='relu'),
@@ -35,18 +40,25 @@ model = keras.Sequential([
 model.compile(optimizer='adam',
               loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
               metrics=['accuracy'])
+
+TEST_DATA_PATH='/Users/ayushtiwari/Desktop/zmq/data/fashion_mnist/test'
+
+print("Loading test data...")
+with open('%s/server.pickle' % TEST_DATA_PATH, 'rb') as file:
+    test_data = pickle.load(file)
+
+x_test = test_data["x_test"]
+y_test = test_data["y_test"]
+
+print('x_test shape:', x_test.shape)
+print(x_test.shape[0], 'test samples')
+
 version = 0
 
-fashion_mnist = tf.keras.datasets.fashion_mnist
-(_, _), (x_test, y_test) = fashion_mnist.load_data()
-x_test = x_test[0:1000]
-y_test = y_test[0:1000]
-x_test = x_test / 255.0
-
-NUM_CLIENTS = 5
+NUM_CLIENTS = 1
 NUM_ROUNDS = 10
 
-SELECTOR_CONSTANT = 2
+SELECTOR_CONSTANT = 1
 
 
 def register():
@@ -65,7 +77,10 @@ def select():
 
     global selected_clients
     selected_clients = []
+
+    global ready_clients
     ready_clients = []
+
     while True:
 
         if selector.poll(10000):
@@ -74,12 +89,16 @@ def select():
             print("Received request from %s" % client_id)
             ready_clients.append(client_id)
             selector.send_pyobj("")
+
+            if len(ready_clients) == len(clients):
+                break
         else:
             break
 
     if len(ready_clients) >= SELECTOR_CONSTANT:
         selected_clients = random.sample(ready_clients, SELECTOR_CONSTANT)
 
+    print("Ready clients: %s" % ready_clients)
     print("Selected clients: %s" % selected_clients)
     return len(selected_clients)
 
@@ -105,19 +124,22 @@ def respond():
         "selected": False
     })
 
-    selected_clients_copy = selected_clients.copy()
-    while len(selected_clients_copy) > 0:
+    ready_clients_copy = ready_clients.copy()
+    while len(ready_clients_copy) > 0:
         request = responder.recv_pyobj()
         client_id = request["client_id"]
-
-        if client_id in selected_clients_copy:
+        if client_id in selected_clients:
             responder.send_pyobj(train_request)
-            selected_clients_copy.remove(client_id)
         else:
             responder.send_pyobj(reject_message)
 
+        ready_clients_copy.remove(client_id)
+
 
 def aggregate():
+    if len(selected_clients) <= 0:
+        return
+
     print("Waiting for updates...")
     updates = []
 
@@ -160,6 +182,5 @@ register()
 
 while True:
     select()
-    if len(selected_clients) > 0:
-        respond()
-        aggregate()
+    respond()
+    aggregate()
