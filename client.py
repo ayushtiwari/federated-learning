@@ -1,18 +1,17 @@
+import json
 import os
-import time
-import pickle
 import random
-
-import zmq
 import socket as sock
+import time
 
 import tensorflow as tf
+import zmq
 from tensorflow import keras
-from tensorflow.keras.datasets import cifar10
+from tensorflow.keras.callbacks import LearningRateScheduler
+from tensorflow.keras.callbacks import ReduceLROnPlateau
 import numpy as np
-import glob
+
 import dataset
-import json
 
 context = zmq.Context()
 
@@ -71,11 +70,40 @@ def request():
         return None, None, None
 
 
-def update():
-    print("Computing update on version... %d" % version)
+def train():
+    print("Computing update on version (%d)..." % version)
+
+    def lr_schedule(epoch):
+        lr = 1e-3
+        if epoch > 180:
+            lr *= 0.5e-3
+        elif epoch > 160:
+            lr *= 1e-3
+        elif epoch > 120:
+            lr *= 1e-2
+        elif epoch > 80:
+            lr *= 1e-1
+        print('Learning rate: ', lr)
+        return lr
+
+    lr_scheduler = LearningRateScheduler(lr_schedule)
+
+    lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1),
+                                   cooldown=0,
+                                   patience=5,
+                                   min_lr=0.5e-6)
+
+    callbacks = [lr_reducer, lr_scheduler]
+
     history = model.fit(datagen.flow(x_train, y_train, batch_size=hparam["batch_size"]),
                         epochs=hparam["epochs"],
-                        workers=4)
+                        workers=4,
+                        callbacks=callbacks)
+
+    return history
+
+
+def update():
 
     metrics = {
         "training": {
@@ -126,8 +154,8 @@ while True:
     notify()
     model, version, hparam = request()
     if model is None:
-        time.sleep(random.randint(10, 20))
         continue
 
+    history = train()
     update()
-    time.sleep(random.randint(10, 30))
+    time.sleep(random.randint(20, 30))

@@ -2,3 +2,5 @@
 .idea*
 /logs/
 /data/
+/test.py
+*pycache*

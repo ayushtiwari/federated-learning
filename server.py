@@ -1,15 +1,11 @@
-import os
-import pickle
-
-import zmq
-import tensorflow as tf
-from tensorflow import keras
+import json
+import random
 
 import numpy as np
-import random
+import zmq
+
 import dataset
 import loader
-import json
 
 context = zmq.Context()
 
@@ -35,9 +31,9 @@ selected_clients = []
 ready_clients = []
 
 print("Loading model...")
-model = loader.cifar10()
+model = loader.cifar10_resnet(version=1)
 
-# TEST_DATA_PATH='/root/mount/ayush/data/fashion_mnist/test'
+# TEST_DATA_PATH='/Users/ayushtiwari/Desktop/zmq/data/cifar10/test'
 TEST_DATA_PATH = '/root/mount/ayush/data/cifar10/test'
 
 print("Loading test data...")
@@ -51,10 +47,10 @@ print(x_test.shape[0], 'test samples')
 
 version = 0
 
-NUM_CLIENTS = 20
+NUM_CLIENTS = 5
 NUM_ROUNDS = 10
 
-SELECTOR_CONSTANT = 10
+SELECTOR_CONSTANT = 3
 
 
 def register():

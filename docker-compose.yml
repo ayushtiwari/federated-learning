@@ -13,5 +13,7 @@ services:
     volumes:
       - /root/mount/ayush/data:/app/data
       - /root/zmq/logs:/app/logs
+#      - /Users/ayushtiwari/Desktop/zmq/logs:/app/logs
+#      - /Users/ayushtiwari/Desktop/zmq/data:/app/data
     tty: true
     command: ["python", "client.py"]

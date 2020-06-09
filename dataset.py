@@ -1,4 +1,3 @@
-import os
 import pickle
 
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
