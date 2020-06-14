@@ -5,8 +5,11 @@ Install dependencies
 ```
 pip install -r requirements.txt
 ```
-
-Update NUM_CLIENT variable in server.py
+Create data partition
+```
+python scripts/data/cifar10.py <NUM_CLIENTS>
+```
+Update NUM_CLIENTS, SELECTOR_CONSTANT variable in server.py
 
 Start Clients
 ```

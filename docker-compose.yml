@@ -5,15 +5,12 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-#      - SERVER_IP=host.docker.internal
-      - SERVER_IP=10.42.67.152
+      - SERVER_IP=host.docker.internal
       - TF_CPP_MIN_LOG_LEVEL=3
-      - TRAIN_DATA_PATH=/app/data/cifar10/train
+      - TRAIN_DATA_PATH=/app/data/fashion_mnist/train
       - LOG_PATH=/app/logs/clients
     volumes:
-      - /root/mount/ayush/data:/app/data
-      - /root/zmq/logs:/app/logs
-#      - /Users/ayushtiwari/Desktop/zmq/logs:/app/logs
-#      - /Users/ayushtiwari/Desktop/zmq/data:/app/data
+      - /Users/ayushtiwari/Desktop/federated-learning/logs:/app/logs
+      - /Users/ayushtiwari/Desktop/federated-learning/data:/app/data
     tty: true
     command: ["python", "client.py"]

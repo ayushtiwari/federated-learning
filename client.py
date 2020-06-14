@@ -73,38 +73,15 @@ def request():
 def train():
     print("Computing update on version (%d)..." % version)
 
-    def lr_schedule(epoch):
-        lr = 1e-3
-        if epoch > 180:
-            lr *= 0.5e-3
-        elif epoch > 160:
-            lr *= 1e-3
-        elif epoch > 120:
-            lr *= 1e-2
-        elif epoch > 80:
-            lr *= 1e-1
-        print('Learning rate: ', lr)
-        return lr
-
-    lr_scheduler = LearningRateScheduler(lr_schedule)
-
-    lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1),
-                                   cooldown=0,
-                                   patience=5,
-                                   min_lr=0.5e-6)
-
-    callbacks = [lr_reducer, lr_scheduler]
-
-    history = model.fit(datagen.flow(x_train, y_train, batch_size=hparam["batch_size"]),
+    history = model.fit(x_train, y_train,
+                        batch_size=hparam["batch_size"],
                         epochs=hparam["epochs"],
-                        workers=4,
-                        callbacks=callbacks)
+                        workers=4)
 
     return history
 
 
 def update():
-
     metrics = {
         "training": {
             "loss": history.history['loss'][-1],
@@ -117,9 +94,9 @@ def update():
         "metrics": metrics
     })
 
-    print("Saving metrics...")
-    with open('%s/client_%s.json' % (os.environ.get("LOG_PATH"), my_id), 'w+') as file:
-        json.dump(logs, file, indent=4, sort_keys=True)
+    # print("Saving metrics...")
+    # with open('%s/client_%s.json' % (os.environ.get("LOG_PATH"), my_id), 'w+') as file:
+    #     json.dump(logs, file, indent=4, sort_keys=True)
 
     _update = dict({
         "client_id": my_id,
@@ -142,8 +119,6 @@ train_data = dataset.train_data(os.environ["TRAIN_DATA_PATH"], my_id)
 
 x_train = train_data["x_train"]
 y_train = train_data["y_train"]
-datagen = dataset.image_data_generator_cifar10()
-datagen.fit(x_train)
 
 print('x_train shape:', x_train.shape)
 print(x_train.shape[0], 'train samples')
@@ -158,4 +133,3 @@ while True:
 
     history = train()
     update()
-    time.sleep(random.randint(20, 30))

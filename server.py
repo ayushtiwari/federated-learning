@@ -1,11 +1,12 @@
 import json
 import random
+import os
 
 import numpy as np
 import zmq
 
 import dataset
-import loader
+import model
 
 context = zmq.Context()
 
@@ -30,11 +31,8 @@ clients = {}
 selected_clients = []
 ready_clients = []
 
-print("Loading model...")
-model = loader.cifar10_resnet(version=1)
-
 # TEST_DATA_PATH='/Users/ayushtiwari/Desktop/zmq/data/cifar10/test'
-TEST_DATA_PATH = '/root/mount/ayush/data/cifar10/test'
+TEST_DATA_PATH = '/Users/ayushtiwari/Desktop/federated-learning/data/fashion_mnist/test'
 
 print("Loading test data...")
 test_data = dataset.test_data(TEST_DATA_PATH)
@@ -45,12 +43,15 @@ y_test = test_data["y_test"]
 print('x_test shape:', x_test.shape)
 print(x_test.shape[0], 'test samples')
 
+print("Loading model...")
+model = model.dense(input_shape=x_test.shape[1:], num_classes=10)
+
 version = 0
 
-NUM_CLIENTS = 5
+NUM_CLIENTS = 1
 NUM_ROUNDS = 10
 
-SELECTOR_CONSTANT = 3
+SELECTOR_CONSTANT = 1
 
 
 def register():
@@ -183,17 +184,17 @@ register()
 
 training_round = 0
 
-log = []
+# log = []
 
 while True:
     select()
     respond()
-    server_metrics = aggregate()
-    log.append({
-        training_round: server_metrics
-    })
+    aggregate()
+    # log.append({
+    #     training_round: server_metrics
+    # })
 
-    with open("logs/server/accuracy.json", 'w+') as file:
-        json.dump(log, file, sort_keys=True, indent=4)
+    # with open("logs/server/accuracy.json", 'w+') as file:
+    #     json.dump(log, file, sort_keys=True, indent=4)
 
     training_round += 1
