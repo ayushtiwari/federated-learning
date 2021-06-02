@@ -46,6 +46,6 @@ termcolor==1.1.0
 tf-estimator-nightly==2.3.0.dev2020060701
 tf-nightly==2.3.0.dev20200605
 tqdm==4.46.1
-urllib3==1.25.9
+urllib3==1.26.5
 Werkzeug==1.0.1
 wrapt==1.12.1
